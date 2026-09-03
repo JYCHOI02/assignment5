@@ -216,7 +216,7 @@
       background-color: #f8fafc;
     }
 
-    /* Chart Section */
+    /* Trend Chart Section */
     .chart-section {
       border-top: 2px solid #f1f5f9;
       padding-top: 24px;
@@ -228,42 +228,25 @@
       color: #0f172a;
       margin-bottom: 16px;
     }
-    .chart-card {
-      background: #f8fafc;
+    .chart-wrap {
+      width: 100%;
+      background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 12px;
-      padding: 16px 16px 8px;
-      position: relative;
+      padding: 16px;
     }
-    .chart-card canvas {
+    #trend-chart {
       width: 100%;
-      height: 220px;
+      height: auto;
       display: block;
-      cursor: crosshair;
     }
-    .chart-empty {
-      font-size: 13px;
-      color: #64748b;
-      font-weight: 600;
-      text-align: center;
-      padding: 60px 0;
+    #trend-chart circle {
+      cursor: pointer;
+      transition: r 0.15s ease;
     }
-    .chart-tooltip {
-      position: absolute;
-      pointer-events: none;
-      background: #0f172a;
-      color: #ffffff;
-      font-size: 12px;
-      font-weight: 700;
-      padding: 6px 10px;
-      border-radius: 8px;
-      transform: translate(-50%, -120%);
-      white-space: nowrap;
-      opacity: 0;
-      transition: opacity 0.1s;
-      z-index: 5;
+    #trend-chart circle:hover {
+      r: 6;
     }
-    .chart-tooltip.active { opacity: 1; }
   </style>
 </head>
 <body>
@@ -320,13 +303,11 @@
 
     <button id="retry-btn" class="btn-retry" onclick="executeFetch()">다시 시도</button>
 
-    <!-- Chart Section -->
+    <!-- Trend Chart Section -->
     <div class="chart-section">
-      <div class="chart-title">환율 추이 (기록 데이터, KST 기준)</div>
-      <div class="chart-card" id="chart-card">
-        <canvas id="rate-chart"></canvas>
-        <div class="chart-tooltip" id="chart-tooltip"></div>
-        <div class="chart-empty" id="chart-empty" style="display:none;">데이터 누적 중입니다. 기록이 2건 이상 쌓이면 그래프가 표시됩니다.</div>
+      <div class="chart-title">환율 추세 (일별, 100엔 기준)</div>
+      <div class="chart-wrap">
+        <svg id="trend-chart" viewBox="0 0 900 260" preserveAspectRatio="xMidYMid meet" role="img" aria-label="일별 환율 추세 차트"></svg>
       </div>
     </div>
 
@@ -431,6 +412,86 @@
       renderChart();
     }
 
+    function renderChart() {
+      const svg = document.getElementById('trend-chart');
+      if (!svg) return;
+
+      const recs = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      const width = 900, height = 260;
+      const padL = 60, padR = 20, padT = 20, padB = 36;
+      const plotW = width - padL - padR;
+      const plotH = height - padT - padB;
+
+      if (recs.length < 2) {
+        svg.innerHTML = `
+          <text x="${width / 2}" y="${height / 2}" text-anchor="middle"
+            fill="#94a3b8" font-size="14" font-weight="600">
+            추세를 표시하려면 2일 이상의 데이터가 필요합니다
+          </text>`;
+        return;
+      }
+
+      const values = recs.map(r => Number(r.value));
+      let minV = Math.min(...values);
+      let maxV = Math.max(...values);
+      if (minV === maxV) { minV -= 1; maxV += 1; }
+      const pad = (maxV - minV) * 0.15;
+      minV -= pad;
+      maxV += pad;
+
+      const xStep = plotW / (recs.length - 1);
+      const xScale = i => padL + i * xStep;
+      const yScale = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+
+      // Horizontal gridlines + y-axis labels
+      let gridSvg = '';
+      const gridCount = 4;
+      for (let g = 0; g <= gridCount; g++) {
+        const gv = minV + (maxV - minV) * (g / gridCount);
+        const gy = yScale(gv);
+        gridSvg += `<line x1="${padL}" y1="${gy}" x2="${width - padR}" y2="${gy}" stroke="#f1f5f9" stroke-width="1" />`;
+        gridSvg += `<text x="${padL - 10}" y="${gy + 4}" text-anchor="end" font-size="11" fill="#94a3b8">${gv.toFixed(1)}</text>`;
+      }
+
+      // Line + area
+      const pts = recs.map((r, i) => `${xScale(i)},${yScale(Number(r.value))}`);
+      const areaPath = `M${xScale(0)},${padT + plotH} L${pts.join(' L')} L${xScale(recs.length - 1)},${padT + plotH} Z`;
+
+      // Rising/falling color based on first vs last value (matches diff-box convention: up=red, down=blue)
+      const trendUp = values[values.length - 1] >= values[0];
+      const lineColor = trendUp ? '#dc2626' : '#2563eb';
+      const areaColor = trendUp ? '#fef2f2' : '#eff6ff';
+
+      // Points with native tooltips
+      let pointsSvg = '';
+      recs.forEach((r, i) => {
+        const cx = xScale(i);
+        const cy = yScale(Number(r.value));
+        pointsSvg += `<circle cx="${cx}" cy="${cy}" r="4" fill="${lineColor}" stroke="#ffffff" stroke-width="2">` +
+          `<title>${r.date}: ${Number(r.value).toFixed(2)} ${r.unit}</title></circle>`;
+      });
+
+      // X-axis date labels (thin out if many points)
+      let labelSvg = '';
+      const labelStep = Math.max(1, Math.ceil(recs.length / 8));
+      recs.forEach((r, i) => {
+        if (i % labelStep === 0 || i === recs.length - 1) {
+          labelSvg += `<text x="${xScale(i)}" y="${height - padB + 20}" text-anchor="middle" font-size="11" fill="#64748b">${r.date.slice(5)}</text>`;
+        }
+      });
+
+      svg.innerHTML = `
+        ${gridSvg}
+        <path d="${areaPath}" fill="${areaColor}" opacity="0.7" />
+        <polyline points="${pts.join(' ')}" fill="none" stroke="${lineColor}" stroke-width="2.5"
+          stroke-linejoin="round" stroke-linecap="round" />
+        ${pointsSvg}
+        ${labelSvg}
+        <line x1="${padL}" y1="${padT + plotH}" x2="${width - padR}" y2="${padT + plotH}" stroke="#e2e8f0" stroke-width="1.5" />
+      `;
+    }
+
     function renderDiff() {
       const diffEl = document.getElementById('diff-value');
       const recs = appState.dailyRecords;
@@ -470,165 +531,6 @@
         tbody.appendChild(tr);
       });
 }
-
-    /* ---- Chart (canvas, no external library) ---- */
-    let chartPoints = []; // cached point positions for hover lookup
-    let chartResizeBound = false;
-
-    function renderChart() {
-      const canvas = document.getElementById('rate-chart');
-      const emptyEl = document.getElementById('chart-empty');
-      if (!canvas) return;
-
-      const sorted = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-      if (sorted.length < 2) {
-        canvas.style.display = 'none';
-        emptyEl.style.display = 'block';
-        return;
-      }
-      canvas.style.display = 'block';
-      emptyEl.style.display = 'none';
-
-      drawLineChart(canvas, sorted);
-
-      if (!chartResizeBound) {
-        let resizeTimer = null;
-        window.addEventListener('resize', () => {
-          clearTimeout(resizeTimer);
-          resizeTimer = setTimeout(() => renderChart(), 150);
-        });
-        chartResizeBound = true;
-      }
-    }
-
-    function drawLineChart(canvas, records) {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      const cssWidth = rect.width || canvas.parentElement.clientWidth;
-      const cssHeight = 220;
-
-      canvas.width = Math.round(cssWidth * dpr);
-      canvas.height = Math.round(cssHeight * dpr);
-
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssWidth, cssHeight);
-
-      const padL = 52, padR = 16, padT = 16, padB = 28;
-      const plotW = cssWidth - padL - padR;
-      const plotH = cssHeight - padT - padB;
-
-      const values = records.map(r => Number(r.value));
-      let minV = Math.min(...values);
-      let maxV = Math.max(...values);
-      if (minV === maxV) { minV -= 1; maxV += 1; }
-      const vPad = (maxV - minV) * 0.12;
-      minV -= vPad; maxV += vPad;
-
-      const xStep = records.length > 1 ? plotW / (records.length - 1) : 0;
-      const yFor = (v) => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
-      const xFor = (i) => padL + xStep * i;
-
-      // Grid lines + y-axis labels
-      ctx.strokeStyle = '#e2e8f0';
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      const gridLines = 4;
-      for (let i = 0; i <= gridLines; i++) {
-        const v = minV + ((maxV - minV) * i) / gridLines;
-        const y = yFor(v);
-        ctx.beginPath();
-        ctx.moveTo(padL, y);
-        ctx.lineTo(cssWidth - padR, y);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillText(v.toFixed(1), padL - 8, y);
-      }
-
-      // X-axis labels (date, thinned out if too many points)
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      const maxLabels = Math.max(2, Math.floor(plotW / 60));
-      const labelStep = Math.max(1, Math.ceil(records.length / maxLabels));
-      records.forEach((r, i) => {
-        if (i % labelStep === 0 || i === records.length - 1) {
-          const shortDate = r.date.length === 10 ? r.date.slice(5) : r.date; // MM-DD
-          ctx.fillText(shortDate, xFor(i), cssHeight - padB + 8);
-        }
-      });
-
-      // Line path
-      ctx.beginPath();
-      records.forEach((r, i) => {
-        const x = xFor(i), y = yFor(Number(r.value));
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      });
-      ctx.strokeStyle = '#2563eb';
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-
-      // Fill under line
-      const lastX = xFor(records.length - 1);
-      ctx.lineTo(lastX, padT + plotH);
-      ctx.lineTo(xFor(0), padT + plotH);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
-      ctx.fill();
-
-      // Points
-      chartPoints = [];
-      records.forEach((r, i) => {
-        const x = xFor(i), y = yFor(Number(r.value));
-        ctx.beginPath();
-        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
-        ctx.fillStyle = '#2563eb';
-        ctx.fill();
-        chartPoints.push({ x, y, date: r.date, value: Number(r.value), unit: r.unit });
-      });
-
-      bindChartHover(canvas);
-    }
-
-    let chartHoverBound = false;
-    function bindChartHover(canvas) {
-      const tooltip = document.getElementById('chart-tooltip');
-      if (chartHoverBound) return;
-      chartHoverBound = true;
-
-      const showTooltip = (clientX, clientY) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = clientX - rect.left;
-        if (!chartPoints.length) return;
-
-        let nearest = chartPoints[0];
-        let minDist = Infinity;
-        chartPoints.forEach(p => {
-          const d = Math.abs(p.x - mouseX);
-          if (d < minDist) { minDist = d; nearest = p; }
-        });
-
-        tooltip.innerText = `${nearest.date}: ${nearest.value.toFixed(2)} ${nearest.unit}`;
-        tooltip.style.left = `${nearest.x}px`;
-        tooltip.style.top = `${nearest.y}px`;
-        tooltip.classList.add('active');
-      };
-
-      canvas.addEventListener('mousemove', (e) => showTooltip(e.clientX, e.clientY));
-      canvas.addEventListener('mouseleave', () => tooltip.classList.remove('active'));
-      canvas.addEventListener('touchstart', (e) => {
-        const t = e.touches[0];
-        if (t) showTooltip(t.clientX, t.clientY);
-      }, { passive: true });
-      canvas.addEventListener('touchmove', (e) => {
-        const t = e.touches[0];
-        if (t) showTooltip(t.clientX, t.clientY);
-      }, { passive: true });
-      canvas.addEventListener('touchend', () => tooltip.classList.remove('active'));
-    }
 
     async function syncRealHistoricalRates() {
       try {
