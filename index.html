@@ -247,6 +247,31 @@
     #trend-chart circle:hover {
       r: 6;
     }
+    .chart-range {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .range-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .range-btn:hover {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+    .range-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #2563eb;
+    }
   </style>
 </head>
 <body>
@@ -306,6 +331,12 @@
     <!-- Trend Chart Section -->
     <div class="chart-section">
       <div class="chart-title">환율 추세 (일별, 100엔 기준)</div>
+      <div class="chart-range" id="chart-range-group">
+        <button type="button" class="range-btn" data-range="7D" onclick="setChartRange('7D', this)">1주</button>
+        <button type="button" class="range-btn" data-range="1M" onclick="setChartRange('1M', this)">1개월</button>
+        <button type="button" class="range-btn" data-range="3M" onclick="setChartRange('3M', this)">3개월</button>
+        <button type="button" class="range-btn active" data-range="ALL" onclick="setChartRange('ALL', this)">전체</button>
+      </div>
       <div class="chart-wrap">
         <svg id="trend-chart" viewBox="0 0 900 260" preserveAspectRatio="xMidYMid meet" role="img" aria-label="일별 환율 추세 차트"></svg>
       </div>
@@ -352,6 +383,8 @@
       lastValidData: null,
       dailyRecords: []
     };
+
+    let chartRange = 'ALL'; // '7D' | '1M' | '3M' | 'ALL'
 
     function initStorage() {
       const storedRecords = localStorage.getItem('t04_jpy_records_v1_4');
@@ -412,11 +445,32 @@
       renderChart();
     }
 
+    function setChartRange(range, btnEl) {
+      chartRange = range;
+      document.querySelectorAll('#chart-range-group .range-btn').forEach(b => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      renderChart();
+    }
+
+    function getFilteredChartRecords() {
+      const all = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+      if (chartRange === 'ALL' || all.length === 0) return all;
+
+      const daysMap = { '7D': 7, '1M': 30, '3M': 90 };
+      const days = daysMap[chartRange];
+      // Anchor to the most recent record's date rather than real "today",
+      // so the filter stays consistent with mocked/recovered test data.
+      const latestDate = new Date(all[all.length - 1].date);
+      const cutoff = new Date(latestDate.getTime() - (days - 1) * 86400000);
+
+      return all.filter(r => new Date(r.date) >= cutoff);
+    }
+
     function renderChart() {
       const svg = document.getElementById('trend-chart');
       if (!svg) return;
 
-      const recs = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+      const recs = getFilteredChartRecords();
 
       const width = 900, height = 260;
       const padL = 60, padR = 20, padT = 20, padB = 36;
@@ -424,10 +478,13 @@
       const plotH = height - padT - padB;
 
       if (recs.length < 2) {
+        const msg = appState.dailyRecords.length >= 2
+          ? '선택한 기간에는 표시할 데이터가 없습니다'
+          : '추세를 표시하려면 2일 이상의 데이터가 필요합니다';
         svg.innerHTML = `
           <text x="${width / 2}" y="${height / 2}" text-anchor="middle"
             fill="#94a3b8" font-size="14" font-weight="600">
-            추세를 표시하려면 2일 이상의 데이터가 필요합니다
+            ${msg}
           </text>`;
         return;
       }
