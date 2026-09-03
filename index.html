@@ -180,29 +180,8 @@
       transition: background 0.2s;
     }
     .btn-retry:hover { background-color: #1d4ed8; }
-    .btn-retry:disabled { background-color: #93c5fd; cursor: not-allowed; }    .btn-retry.active { display: block; }
-
-    /* Current Rate Button */
-    .btn-current-rate {
-      margin-top: 14px;
-      padding: 10px 14px;
-      background-color: #0f172a;
-      color: #ffffff;
-      border: none;
-      border-radius: 9px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
-    }
-    .btn-current-rate:hover { opacity: 0.88; }
-    .btn-current-rate:active { transform: translateY(1px); }
-    .btn-current-rate:disabled { opacity: 0.55; cursor: not-allowed; }
-    .current-rate-status {
-      margin-top: 8px;
-      font-size: 12px;
-      color: #64748b;
-    }
+    .btn-retry:disabled { background-color: #93c5fd; cursor: not-allowed; }
+    .btn-retry.active { display: block; }
 
     /* History Table Section */
     .history-section {
@@ -236,6 +215,55 @@
     .history-table tr:hover td {
       background-color: #f8fafc;
     }
+
+    /* Chart Section */
+    .chart-section {
+      border-top: 2px solid #f1f5f9;
+      padding-top: 24px;
+      margin-bottom: 32px;
+    }
+    .chart-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 16px;
+    }
+    .chart-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px 16px 8px;
+      position: relative;
+    }
+    .chart-card canvas {
+      width: 100%;
+      height: 220px;
+      display: block;
+      cursor: crosshair;
+    }
+    .chart-empty {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+      text-align: center;
+      padding: 60px 0;
+    }
+    .chart-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transform: translate(-50%, -120%);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.1s;
+      z-index: 5;
+    }
+    .chart-tooltip.active { opacity: 1; }
   </style>
 </head>
 <body>
@@ -265,13 +293,8 @@
             <span class="target-value" id="target-value">조회 중...</span>
             <span class="unit" id="unit">KRW/100JPY</span>
           </div>
-        </div>        <div class="diff-box" id="diff-value">어제 대비 변화: -</div>
-        <button id="current-rate-btn" class="btn-current-rate" onclick="executeFetch(true)">
-          🔄 현재 환율 조회
-        </button>
-        <div class="current-rate-status" id="current-rate-status">
-          버튼을 누르면 최신 환율을 다시 조회합니다.
         </div>
+        <div class="diff-box" id="diff-value">어제 대비 변화: -</div>
       </div>
 
       <!-- Info Panel -->
@@ -296,6 +319,16 @@
     </div>
 
     <button id="retry-btn" class="btn-retry" onclick="executeFetch()">다시 시도</button>
+
+    <!-- Chart Section -->
+    <div class="chart-section">
+      <div class="chart-title">환율 추이 (기록 데이터, KST 기준)</div>
+      <div class="chart-card" id="chart-card">
+        <canvas id="rate-chart"></canvas>
+        <div class="chart-tooltip" id="chart-tooltip"></div>
+        <div class="chart-empty" id="chart-empty" style="display:none;">데이터 누적 중입니다. 기록이 2건 이상 쌓이면 그래프가 표시됩니다.</div>
+      </div>
+    </div>
 
     <!-- Full Width History Section -->
     <div class="history-section">
@@ -391,19 +424,11 @@
         });
         document.getElementById('data-time').innerText = appState.lastValidData.dataTime;
         document.getElementById('fetch-time').innerText = appState.lastValidData.fetchTime;
-
-        const sourceUrl = appState.lastValidData.url;
-        if (sourceUrl) {
-          try {
-            document.getElementById('source').innerText = new URL(sourceUrl).hostname;
-          } catch (e) {
-            document.getElementById('source').innerText = sourceUrl;
-          }
-        }
       }
 
       renderDiff();
       renderHistoryTable();
+      renderChart();
     }
 
     function renderDiff() {
@@ -445,6 +470,165 @@
         tbody.appendChild(tr);
       });
 }
+
+    /* ---- Chart (canvas, no external library) ---- */
+    let chartPoints = []; // cached point positions for hover lookup
+    let chartResizeBound = false;
+
+    function renderChart() {
+      const canvas = document.getElementById('rate-chart');
+      const emptyEl = document.getElementById('chart-empty');
+      if (!canvas) return;
+
+      const sorted = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      if (sorted.length < 2) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      canvas.style.display = 'block';
+      emptyEl.style.display = 'none';
+
+      drawLineChart(canvas, sorted);
+
+      if (!chartResizeBound) {
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(() => renderChart(), 150);
+        });
+        chartResizeBound = true;
+      }
+    }
+
+    function drawLineChart(canvas, records) {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const cssWidth = rect.width || canvas.parentElement.clientWidth;
+      const cssHeight = 220;
+
+      canvas.width = Math.round(cssWidth * dpr);
+      canvas.height = Math.round(cssHeight * dpr);
+
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      const padL = 52, padR = 16, padT = 16, padB = 28;
+      const plotW = cssWidth - padL - padR;
+      const plotH = cssHeight - padT - padB;
+
+      const values = records.map(r => Number(r.value));
+      let minV = Math.min(...values);
+      let maxV = Math.max(...values);
+      if (minV === maxV) { minV -= 1; maxV += 1; }
+      const vPad = (maxV - minV) * 0.12;
+      minV -= vPad; maxV += vPad;
+
+      const xStep = records.length > 1 ? plotW / (records.length - 1) : 0;
+      const yFor = (v) => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+      const xFor = (i) => padL + xStep * i;
+
+      // Grid lines + y-axis labels
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      const gridLines = 4;
+      for (let i = 0; i <= gridLines; i++) {
+        const v = minV + ((maxV - minV) * i) / gridLines;
+        const y = yFor(v);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(cssWidth - padR, y);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillText(v.toFixed(1), padL - 8, y);
+      }
+
+      // X-axis labels (date, thinned out if too many points)
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const maxLabels = Math.max(2, Math.floor(plotW / 60));
+      const labelStep = Math.max(1, Math.ceil(records.length / maxLabels));
+      records.forEach((r, i) => {
+        if (i % labelStep === 0 || i === records.length - 1) {
+          const shortDate = r.date.length === 10 ? r.date.slice(5) : r.date; // MM-DD
+          ctx.fillText(shortDate, xFor(i), cssHeight - padB + 8);
+        }
+      });
+
+      // Line path
+      ctx.beginPath();
+      records.forEach((r, i) => {
+        const x = xFor(i), y = yFor(Number(r.value));
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // Fill under line
+      const lastX = xFor(records.length - 1);
+      ctx.lineTo(lastX, padT + plotH);
+      ctx.lineTo(xFor(0), padT + plotH);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
+      ctx.fill();
+
+      // Points
+      chartPoints = [];
+      records.forEach((r, i) => {
+        const x = xFor(i), y = yFor(Number(r.value));
+        ctx.beginPath();
+        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#2563eb';
+        ctx.fill();
+        chartPoints.push({ x, y, date: r.date, value: Number(r.value), unit: r.unit });
+      });
+
+      bindChartHover(canvas);
+    }
+
+    let chartHoverBound = false;
+    function bindChartHover(canvas) {
+      const tooltip = document.getElementById('chart-tooltip');
+      if (chartHoverBound) return;
+      chartHoverBound = true;
+
+      const showTooltip = (clientX, clientY) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = clientX - rect.left;
+        if (!chartPoints.length) return;
+
+        let nearest = chartPoints[0];
+        let minDist = Infinity;
+        chartPoints.forEach(p => {
+          const d = Math.abs(p.x - mouseX);
+          if (d < minDist) { minDist = d; nearest = p; }
+        });
+
+        tooltip.innerText = `${nearest.date}: ${nearest.value.toFixed(2)} ${nearest.unit}`;
+        tooltip.style.left = `${nearest.x}px`;
+        tooltip.style.top = `${nearest.y}px`;
+        tooltip.classList.add('active');
+      };
+
+      canvas.addEventListener('mousemove', (e) => showTooltip(e.clientX, e.clientY));
+      canvas.addEventListener('mouseleave', () => tooltip.classList.remove('active'));
+      canvas.addEventListener('touchstart', (e) => {
+        const t = e.touches[0];
+        if (t) showTooltip(t.clientX, t.clientY);
+      }, { passive: true });
+      canvas.addEventListener('touchmove', (e) => {
+        const t = e.touches[0];
+        if (t) showTooltip(t.clientX, t.clientY);
+      }, { passive: true });
+      canvas.addEventListener('touchend', () => tooltip.classList.remove('active'));
+    }
 
     async function syncRealHistoricalRates() {
       try {
@@ -506,31 +690,19 @@
       throw new Error('OFFLINE');
     }
 
-    async function executeFetch(forceLive = false) {
+    async function executeFetch(mockParam = null) {
       const retryBtn = document.getElementById('retry-btn');
-      const currentRateBtn = document.getElementById('current-rate-btn');
-      const currentRateStatus = document.getElementById('current-rate-status');
       const urlParams = new URLSearchParams(window.location.search);
-      const mockMode = forceLive ? null : urlParams.get('mock');
+      const mockMode = mockParam || urlParams.get('mock');
 
       if (retryBtn) {
         retryBtn.disabled = true;
         retryBtn.innerText = "조회 중...";
       }
 
-      if (currentRateBtn) {
-        currentRateBtn.disabled = true;
-        currentRateBtn.innerText = "조회 중...";
-      }
-
-      if (currentRateStatus && forceLive) {
-        currentRateStatus.innerText = "API에서 현재 환율을 조회하는 중...";
-      }
-
       if (mockMode) {
         handleMockFailure(mockMode);
         resetRetryBtn();
-        resetCurrentRateBtn();
         return;
       }
 
@@ -546,19 +718,14 @@
         appState.lastValidData = {
           value: data.value,
           dataTime: dataTimeStr,
-          fetchTime: fetchTimeStr,
-          url: data.url
+          fetchTime: fetchTimeStr
         };
         localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
 
         addOrUpdateDailyRecord(kstDate, data.url, dataTimeStr, data.value, 'KRW/100JPY');
 
         appState.status = 'fresh';
-        appState.error_code = 'none'
-
-          if (currentRateStatus && forceLive) {
-            currentRateStatus.innerText = `마지막 조회: ${fetchTimeStr}`;
-          };
+        appState.error_code = 'none';
 
       } catch (err) {
         let errCode = 'OFFLINE';
@@ -566,16 +733,7 @@
         setFailureState(errCode);
       } finally {
         resetRetryBtn();
-        resetCurrentRateBtn();
         renderUI();
-      }
-    }
-
-    function resetCurrentRateBtn() {
-      const currentRateBtn = document.getElementById('current-rate-btn');
-      if (currentRateBtn) {
-        currentRateBtn.disabled = false;
-        currentRateBtn.innerText = "🔄 현재 환율 조회";
       }
     }
 
@@ -645,7 +803,7 @@
     });
 
     initStorage();
-    executeFetch(false);
+    executeFetch();
   </script>
 </body>
 </html>
