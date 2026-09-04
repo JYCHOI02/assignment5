@@ -201,9 +201,7 @@
       cursor: pointer;
       transition: all 0.2s ease;
     }
-    .period-btn:hover {
-      color: #0f172a;
-    }
+    .period-btn:hover { color: #0f172a; }
     .period-btn.active {
       background: #ffffff;
       color: #2563eb;
@@ -281,9 +279,7 @@
       border-bottom: 1px solid #f1f5f9;
       color: #334155;
     }
-    .history-table tr:hover td {
-      background-color: #f8fafc;
-    }
+    .history-table tr:hover td { background-color: #f8fafc; }
   </style>
 </head>
 <body>
@@ -303,9 +299,8 @@
       <div id="error-msg">실패 상태: -</div>
     </div>
 
-    <!-- Main 2-Column Grid -->
+    <!-- Main Grid -->
     <div class="main-grid">
-      <!-- Metric Card -->
       <div class="metric-card">
         <div>
           <div class="metric-label">현재 엔/원 환율 (100엔 기준)</div>
@@ -317,7 +312,6 @@
         <div class="diff-box" id="diff-value">어제 대비 변화: -</div>
       </div>
 
-      <!-- Info Panel -->
       <div class="info-panel">
         <div class="info-item">
           <span class="info-label">데이터 출처</span>
@@ -348,14 +342,12 @@
           <button class="period-btn" onclick="setChartPeriod('all')">전체 기간</button>
         </div>
       </div>
-      <div class="chart-container" id="chart-container">
-        <!-- Dynamic Chart Rendering -->
-      </div>
+      <div class="chart-container" id="chart-container"></div>
     </div>
 
     <button id="retry-btn" class="btn-retry" onclick="executeFetch()">다시 시도</button>
 
-    <!-- Full Width History Section -->
+    <!-- History Table Section -->
     <div class="history-section">
       <div class="history-title">일별 관측 기록 (Asia/Seoul)</div>
       <table class="history-table">
@@ -368,15 +360,12 @@
             <th>단위</th>
           </tr>
         </thead>
-        <tbody id="history-tbody">
-          <!-- Dynamic Insertion -->
-        </tbody>
+        <tbody id="history-tbody"></tbody>
       </table>
     </div>
   </div>
 
   <script>
-    /* Application Version: 1.4 */
     const PRIMARY_API = 'https://open.er-api.com/v6/latest/JPY';
     const FALLBACK_API = 'https://api.exchangerate-api.com/v4/latest/JPY';
 
@@ -400,14 +389,10 @@
 
     function initStorage() {
       const storedRecords = localStorage.getItem('t04_jpy_records_v1_4');
-      if (storedRecords) {
-        appState.dailyRecords = JSON.parse(storedRecords);
-      }
+      if (storedRecords) appState.dailyRecords = JSON.parse(storedRecords);
 
       const storedLast = localStorage.getItem('t04_last_valid_data_v1_4');
-      if (storedLast) {
-        appState.lastValidData = JSON.parse(storedLast);
-      }
+      if (storedLast) appState.lastValidData = JSON.parse(storedLast);
     }
 
     function getKstDateStr(dateObj) {
@@ -418,6 +403,21 @@
     function formatDate(date) {
       const pad = (n) => String(n).padStart(2, '0');
       return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+
+    // 타임아웃 지원 네트워크 Fetch 함수
+    async function fetchWithTimeout(resource, options = {}) {
+      const { timeout = 4000 } = options;
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(resource, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+      } catch (error) {
+        clearTimeout(id);
+        throw error;
+      }
     }
 
     function renderUI() {
@@ -437,11 +437,8 @@
         retryBtn.classList.remove('active');
       }
 
-      if (appState.status === 'stale') {
-        staleBadge.classList.add('active');
-      } else {
-        staleBadge.classList.remove('active');
-      }
+      if (appState.status === 'stale') staleBadge.classList.add('active');
+      else staleBadge.classList.remove('active');
 
       if (appState.lastValidData) {
         valEl.innerText = Number(appState.lastValidData.value).toLocaleString('ko-KR', {
@@ -459,16 +456,9 @@
 
     function setChartPeriod(period) {
       appState.selectedPeriod = period;
-      
-      const btns = document.querySelectorAll('.period-btn');
-      btns.forEach(btn => {
-        if (btn.getAttribute('onclick').includes(`'${period}'`)) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
+      document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${period}'`));
       });
-
       renderChart();
     }
 
@@ -492,23 +482,16 @@
         filteredRecs = recs.filter(r => new Date(r.date) >= cutoff);
       }
 
-      if (filteredRecs.length === 0) {
-        filteredRecs = recs; // 데이터가 너무 부족한 경우 전체 출력 Fallback
-      }
+      if (filteredRecs.length === 0) filteredRecs = recs;
 
       const values = filteredRecs.map(r => r.value);
       let minVal = Math.min(...values);
       let maxVal = Math.max(...values);
-      
-      if (minVal === maxVal) {
-        minVal -= 1;
-        maxVal += 1;
-      }
+      if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
 
       const svgWidth = 800;
       const svgHeight = 180;
       const padding = { top: 20, right: 30, bottom: 30, left: 30 };
-
       const chartW = svgWidth - padding.left - padding.right;
       const chartH = svgHeight - padding.top - padding.bottom;
 
@@ -522,29 +505,20 @@
 
       let svgHtml = `
         <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}">
-          <!-- Background Grid Lines -->
           <line x1="${padding.left}" y1="${padding.top}" x2="${svgWidth - padding.right}" y2="${padding.top}" stroke="#e2e8f0" stroke-dasharray="4" />
           <line x1="${padding.left}" y1="${padding.top + chartH/2}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH/2}" stroke="#e2e8f0" stroke-dasharray="4" />
           <line x1="${padding.left}" y1="${padding.top + chartH}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH}" stroke="#e2e8f0" stroke-dasharray="4" />
-
-          <!-- Line Path -->
           <polyline fill="none" stroke="#2563eb" stroke-width="3" points="${polylinePoints}" stroke-linecap="round" stroke-linejoin="round" />
       `;
 
-      // Draw Data Circles & Labels
       points.forEach((p, idx) => {
         const isEdge = idx === 0 || idx === points.length - 1;
         const showLabel = filteredRecs.length <= 10 || isEdge;
-
-        svgHtml += `
-          <circle cx="${p.x}" cy="${p.y}" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2.5" />
-        `;
-
+        svgHtml += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2.5" />`;
         if (showLabel) {
-          const shortDate = p.date.substring(5); // MM-DD
           svgHtml += `
             <text x="${p.x}" y="${p.y - 10}" font-size="11" font-weight="700" fill="#1e293b" text-anchor="middle">${p.value.toFixed(2)}</text>
-            <text x="${p.x}" y="${svgHeight - 5}" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">${shortDate}</text>
+            <text x="${p.x}" y="${svgHeight - 5}" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">${p.date.substring(5)}</text>
           `;
         }
       });
@@ -580,7 +554,6 @@
       sorted.forEach(rec => {
         const tr = document.createElement('tr');
         const sourceDomain = rec.url ? new URL(rec.url).hostname : 'open.er-api.com';
-
         tr.innerHTML = `
           <td><strong>${rec.date}</strong></td>
           <td>${sourceDomain}</td>
@@ -595,15 +568,13 @@
     async function syncRealHistoricalRates() {
       try {
         const today = new Date();
-        // 최근 1개월(30일) 수준의 히스토리 수집
         const pastDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
         const startDateStr = getKstDateStr(pastDate);
         
-        const histRes = await fetch(`https://api.frankfurter.app/${startDateStr}..?from=JPY&to=KRW`);
+        const histRes = await fetchWithTimeout(`https://api.frankfurter.app/${startDateStr}..?from=JPY&to=KRW`, { timeout: 3000 });
         if (histRes.ok) {
           const histData = await histRes.json();
           const rates = histData.rates;
-          
           Object.keys(rates).forEach(dateStr => {
             if (rates[dateStr] && rates[dateStr].KRW) {
               const real100JpyRate = Number((rates[dateStr].KRW * 100).toFixed(2));
@@ -612,42 +583,34 @@
           });
         }
       } catch (e) {
-        console.warn('Historical sync skipped');
+        console.warn('Historical sync skipped or timed out');
       }
     }
 
     async function fetchJpyExchangeRate() {
       try {
-        const res = await fetch(PRIMARY_API);
+        const res = await fetchWithTimeout(PRIMARY_API, { timeout: 4000 });
         if (res.ok) {
           const data = await res.json();
           const rawKrwRate = data.rates.KRW;
           const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
           const unixTime = data.time_last_update_unix || Math.floor(Date.now() / 1000);
-          return {
-            value: jpy100Rate,
-            time: new Date(unixTime * 1000),
-            url: PRIMARY_API
-          };
+          return { value: jpy100Rate, time: new Date(unixTime * 1000), url: PRIMARY_API };
         }
       } catch (e) {
-        console.warn('Primary fetch failed, trying fallback...');
+        console.warn('Primary API failed/timed out, switching to Fallback...');
       }
 
       try {
-        const res = await fetch(FALLBACK_API);
+        const res = await fetchWithTimeout(FALLBACK_API, { timeout: 4000 });
         if (res.ok) {
           const data = await res.json();
           const rawKrwRate = data.rates.KRW;
           const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
-          return {
-            value: jpy100Rate,
-            time: new Date(),
-            url: FALLBACK_API
-          };
+          return { value: jpy100Rate, time: new Date(), url: FALLBACK_API };
         }
       } catch (e) {
-        console.error('Fallback fetch failed');
+        console.error('Fallback API failed');
       }
 
       throw new Error('OFFLINE');
@@ -655,6 +618,7 @@
 
     async function executeFetch(mockParam = null) {
       const retryBtn = document.getElementById('retry-btn');
+      const targetVal = document.getElementById('target-value');
       const urlParams = new URLSearchParams(window.location.search);
       const mockMode = mockParam || urlParams.get('mock');
 
@@ -678,12 +642,8 @@
         const fetchTimeStr = formatDate(now);
         const dataTimeStr = formatDate(data.time);
 
-        appState.lastValidData = {
-          value: data.value,
-          dataTime: dataTimeStr,
-          fetchTime: fetchTimeStr
-        };
-        localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
+        appState.lastValidData = { value: data.value, dataTime: dataTimeStr, fetchTime: fetchTimeStr };
+        localStorage.setItem('t04_last_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
 
         addOrUpdateDailyRecord(kstDate, data.url, dataTimeStr, data.value, 'KRW/100JPY');
 
@@ -694,7 +654,11 @@
         let errCode = 'OFFLINE';
         if (err.message === 'INVALID_FORMAT' || err.message === 'FORMAT_MUTATED') errCode = 'INVALID_FORMAT';
         setFailureState(errCode);
-      } opacity {
+
+        if (targetVal && !appState.lastValidData) {
+          targetVal.innerText = "조회 실패";
+        }
+      } finally {
         resetRetryBtn();
         renderUI();
       }
@@ -710,7 +674,6 @@
 
     function handleMockFailure(mode) {
       const upperMode = String(mode).toUpperCase();
-      
       if (upperMode === 'TIMEOUT') setFailureState('TIMEOUT');
       else if (upperMode === 'AUTH' || upperMode === 'HTTP_401') setFailureState('HTTP_401');
       else if (upperMode === 'RATE_LIMIT') setFailureState('RATE_LIMIT');
@@ -738,7 +701,6 @@
         fetchTime: formatDate(new Date())
       };
       localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
-
       addOrUpdateDailyRecord(nextDate, PRIMARY_API, formatDate(new Date()), recoveredVal, 'KRW/100JPY');
     }
 
@@ -746,20 +708,16 @@
       const idx = appState.dailyRecords.findIndex(r => r.date === dateStr);
       const recordObj = { date: dateStr, url: url, dataTime: dataTime, value: val, unit: unit };
 
-      if (idx >= 0) {
-        appState.dailyRecords[idx] = recordObj;
-      } else {
-        appState.dailyRecords.push(recordObj);
-      }
+      if (idx >= 0) appState.dailyRecords[idx] = recordObj;
+      else appState.dailyRecords.push(recordObj);
+      
       localStorage.setItem('t04_jpy_records_v1_4', JSON.stringify(appState.dailyRecords));
     }
 
-    // 커스텀 테스트 이벤트 트래커 (콘솔 자동화 테스트용)
     window.addEventListener('t04-fixture-trigger', (e) => {
       const detail = e.detail || {};
-      if (detail.error_code) {
-        handleMockFailure(detail.error_code);
-      } else if (detail.action === 'T04-RECOVER-D2') {
+      if (detail.error_code) handleMockFailure(detail.error_code);
+      else if (detail.action === 'T04-RECOVER-D2') {
         recoverD2Asset();
         renderUI();
       }
@@ -767,117 +725,6 @@
 
     initStorage();
     executeFetch();
-    // 1. 타임아웃(5초)이 적용된 safeFetch 함수 추가
-async function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 5000 } = options;
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(resource, {
-      ...options,
-      signal: controller.signal
-    });
-    clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    throw error;
-  }
-}
-
-// 2. 타임아웃 적용 및 Fallback 예외 처리 보강
-async function fetchJpyExchangeRate() {
-  try {
-    const res = await fetchWithTimeout(PRIMARY_API, { timeout: 5000 });
-    if (res.ok) {
-      const data = await res.json();
-      const rawKrwRate = data.rates.KRW;
-      const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
-      const unixTime = data.time_last_update_unix || Math.floor(Date.now() / 1000);
-      return {
-        value: jpy100Rate,
-        time: new Date(unixTime * 1000),
-        url: PRIMARY_API
-      };
-    }
-  } catch (e) {
-    console.warn('Primary fetch failed/timed out, trying fallback...');
-  }
-
-  try {
-    const res = await fetchWithTimeout(FALLBACK_API, { timeout: 5000 });
-    if (res.ok) {
-      const data = await res.json();
-      const rawKrwRate = data.rates.KRW;
-      const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
-      return {
-        value: jpy100Rate,
-        time: new Date(),
-        url: FALLBACK_API
-      };
-    }
-  } catch (e) {
-    console.error('Fallback fetch failed/timed out');
-  }
-
-  throw new Error('OFFLINE');
-}
-
-// 3. 무한 로딩 방지를 위한 try-catch-finally 보강
-async function executeFetch(mockParam = null) {
-  const retryBtn = document.getElementById('retry-btn');
-  const targetVal = document.getElementById('target-value');
-  const urlParams = new URLSearchParams(window.location.search);
-  const mockMode = mockParam || urlParams.get('mock');
-
-  if (retryBtn) {
-    retryBtn.disabled = true;
-    retryBtn.innerText = "조회 중...";
-  }
-
-  if (mockMode) {
-    handleMockFailure(mockMode);
-    resetRetryBtn();
-    return;
-  }
-
-  try {
-    // 히스토리 동기화 실패가 메인 조회를 막지 않도록 Catch 처리
-    await syncRealHistoricalRates().catch(e => console.warn('Sync failed:', e));
-
-    const data = await fetchJpyExchangeRate();
-    const now = new Date();
-    const kstDate = getKstDateStr(now);
-    const fetchTimeStr = formatDate(now);
-    const dataTimeStr = formatDate(data.time);
-
-    appState.lastValidData = {
-      value: data.value,
-      dataTime: dataTimeStr,
-      fetchTime: fetchTimeStr
-    };
-    localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
-
-    addOrUpdateDailyRecord(kstDate, data.url, dataTimeStr, data.value, 'KRW/100JPY');
-
-    appState.status = 'fresh';
-    appState.error_code = 'none';
-
-  } catch (err) {
-    let errCode = 'OFFLINE';
-    if (err.message === 'INVALID_FORMAT' || err.message === 'FORMAT_MUTATED') errCode = 'INVALID_FORMAT';
-    setFailureState(errCode);
-    
-    // 조회가 안 될 경우 '조회 중...' 글자 변경
-    if (targetVal && !appState.lastValidData) {
-      targetVal.innerText = "조회 실패";
-    }
-  } finally {
-    // 어떤 에러가 발생해도 무한 로딩을 끊고 버튼 및 UI 원복
-    resetRetryBtn();
-    renderUI();
-  }
-}
-    </script>
+  </script>
 </body>
 </html>
