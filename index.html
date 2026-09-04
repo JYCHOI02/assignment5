@@ -1,869 +1,741 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>T04 대시보드 - 엔/원 환율 v1.4</title>
-    <style>
-        * {
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>T04 대시보드 - 엔/원 환율 v1.4</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+      margin: 0;
+      padding: 32px 20px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .dashboard-container {
+      width: 100%;
+      max-width: 960px;
+      background: #ffffff;
+      border-radius: 16px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      padding: 32px;
+    }
+    /* Header Section */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #f1f5f9;
+      margin-bottom: 24px;
+    }
+    .title-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .title-text {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .version-badge {
+      background-color: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+    .stale-badge {
+      background-color: #fef3c7;
+      color: #d97706;
+      border: 1px solid #fde68a;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      display: none;
+    }
+    .stale-badge.active { display: inline-block; }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
-            min-height: 100vh;
-            margin: 0;
-            padding: 32px 20px;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-        }
+    /* Error Banner */
+    .error-banner {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 14px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 24px;
+      display: none;
+      font-weight: 600;
+    }
+    .error-banner.active { display: block; }
 
-        .dashboard-container {
-            width: 100%;
-            max-width: 960px;
-            background: #ffffff;
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-            padding: 32px;
-        }
+    /* Grid Layout for Top Panel */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    @media (max-width: 768px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
 
-        /* Header Section */
-        .dashboard-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #f1f5f9;
-            margin-bottom: 24px;
-        }
+    /* Primary Metric Card */
+    .metric-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .metric-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    .value-box {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .target-value {
+      font-size: 44px;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -1px;
+    }
+    .unit {
+      font-size: 18px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .diff-box {
+      font-size: 14px;
+      font-weight: 700;
+      color: #475569;
+      padding: 8px 12px;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      display: inline-block;
+      width: fit-content;
+    }
+    .diff-box.up { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+    .diff-box.down { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
 
-        .title-area {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+    /* Info Meta Panel */
+    .info-panel {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 14px;
+    }
+    .info-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .info-item:last-child {
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .info-label { color: #64748b; font-weight: 500; }
+    .info-content { color: #0f172a; font-weight: 700; }
 
-        .title-text {
-            font-size: 20px;
-            font-weight: 800;
-            color: #0f172a;
-        }
+    /* Chart Section Styles */
+    .chart-section {
+      border-top: 2px solid #f1f5f9;
+      padding-top: 24px;
+      margin-bottom: 32px;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .chart-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .period-filter-group {
+      display: flex;
+      gap: 6px;
+      background: #f1f5f9;
+      padding: 4px;
+      border-radius: 8px;
+    }
+    .period-btn {
+      border: none;
+      background: transparent;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .period-btn:hover { color: #0f172a; }
+    .period-btn.active {
+      background: #ffffff;
+      color: #2563eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .chart-container {
+      width: 100%;
+      height: 220px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+    }
+    .chart-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .chart-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 600;
+    }
 
-        .version-badge {
-            background-color: #eff6ff;
-            color: #2563eb;
-            border: 1px solid #bfdbfe;
-            font-size: 12px;
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-weight: 700;
-        }
+    /* Retry Button */
+    .btn-retry {
+      width: 100%;
+      padding: 12px;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: none;
+      margin-bottom: 24px;
+      transition: background 0.2s;
+    }
+    .btn-retry:hover { background-color: #1d4ed8; }
+    .btn-retry:disabled { background-color: #93c5fd; cursor: not-allowed; }
+    .btn-retry.active { display: block; }
 
-        .stale-badge {
-            background-color: #fef3c7;
-            color: #d97706;
-            border: 1px solid #fde68a;
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-weight: 700;
-            display: none;
-        }
-
-        .stale-badge.active {
-            display: inline-block;
-        }
-
-        /* Error Banner */
-        .error-banner {
-            background-color: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #991b1b;
-            padding: 14px 18px;
-            border-radius: 10px;
-            font-size: 14px;
-            margin-bottom: 24px;
-            display: none;
-            font-weight: 600;
-        }
-
-        .error-banner.active {
-            display: block;
-        }
-
-        /* Grid Layout for Top Panel */
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1.2fr 1fr;
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-
-        @media (max-width: 768px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Primary Metric Card */
-        .metric-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .metric-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #64748b;
-            margin-bottom: 8px;
-        }
-
-        .value-box {
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .target-value {
-            font-size: 44px;
-            font-weight: 900;
-            color: #0f172a;
-            letter-spacing: -1px;
-        }
-
-        .unit {
-            font-size: 18px;
-            font-weight: 700;
-            color: #475569;
-        }
-
-        .diff-box {
-            font-size: 14px;
-            font-weight: 700;
-            color: #475569;
-            padding: 8px 12px;
-            background: #ffffff;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            display: inline-block;
-            width: fit-content;
-        }
-
-        .diff-box.up {
-            color: #dc2626;
-            border-color: #fecaca;
-            background: #fef2f2;
-        }
-
-        .diff-box.down {
-            color: #2563eb;
-            border-color: #bfdbfe;
-            background: #eff6ff;
-        }
-
-        /* Info Meta Panel */
-        .info-panel {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px 24px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 14px;
-        }
-
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 13px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .info-item:last-child {
-            padding-bottom: 0;
-            border-bottom: none;
-        }
-
-        .info-label {
-            color: #64748b;
-            font-weight: 500;
-        }
-
-        .info-content {
-            color: #0f172a;
-            font-weight: 700;
-        }
-
-        /* Chart Section Styles */
-        .chart-section {
-            border-top: 2px solid #f1f5f9;
-            padding-top: 24px;
-            margin-bottom: 32px;
-        }
-
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-
-        .chart-title {
-            font-size: 15px;
-            font-weight: 800;
-            color: #0f172a;
-        }
-
-        .period-filter-group {
-            display: flex;
-            gap: 6px;
-            background: #f1f5f9;
-            padding: 4px;
-            border-radius: 8px;
-        }
-
-        .period-btn {
-            border: none;
-            background: transparent;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 700;
-            color: #64748b;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .period-btn:hover {
-            color: #0f172a;
-        }
-
-        .period-btn.active {
-            background: #ffffff;
-            color: #2563eb;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .chart-container {
-            width: 100%;
-            height: 220px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 16px;
-            position: relative;
-        }
-
-        .chart-svg {
-            width: 100%;
-            height: 100%;
-            overflow: visible;
-        }
-
-        .chart-empty {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: #94a3b8;
-            font-size: 13px;
-            font-weight: 600;
-        }
-
-        /* Retry Button */
-        .btn-retry {
-            width: 100%;
-            padding: 12px;
-            background-color: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            display: none;
-            margin-bottom: 24px;
-            transition: background 0.2s;
-        }
-
-        .btn-retry:hover {
-            background-color: #1d4ed8;
-        }
-
-        .btn-retry:disabled {
-            background-color: #93c5fd;
-            cursor: not-allowed;
-        }
-
-        .btn-retry.active {
-            display: block;
-        }
-
-        /* History Table Section */
-        .history-section {
-            border-top: 2px solid #f1f5f9;
-            padding-top: 24px;
-        }
-
-        .history-title {
-            font-size: 15px;
-            font-weight: 800;
-            color: #0f172a;
-            margin-bottom: 16px;
-        }
-
-        .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-
-        .history-table th {
-            background-color: #f8fafc;
-            color: #64748b;
-            font-weight: 700;
-            text-align: left;
-            padding: 12px 16px;
-            border-bottom: 2px solid #e2e8f0;
-        }
-
-        .history-table td {
-            padding: 14px 16px;
-            border-bottom: 1px solid #f1f5f9;
-            color: #334155;
-        }
-
-        .history-table tr:hover td {
-            background-color: #f8fafc;
-        }
-    </style>
+    /* History Table Section */
+    .history-section {
+      border-top: 2px solid #f1f5f9;
+      padding-top: 24px;
+    }
+    .history-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 16px;
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .history-table th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-weight: 700;
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .history-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+    .history-table tr:hover td { background-color: #f8fafc; }
+  </style>
 </head>
-
 <body>
 
-    <div class="dashboard-container">
-        <!-- Header -->
-        <div class="dashboard-header">
-            <div class="title-area">
-                <span class="title-text">엔/원 환율 실시간 대시보드</span>
-                <span class="version-badge">v1.4</span>
-            </div>
-            <span id="stale-badge" class="stale-badge">오래된 값</span>
-        </div>
-
-        <!-- Error Banner -->
-        <div id="error-banner" class="error-banner">
-            <div id="error-msg">실패 상태: -</div>
-        </div>
-
-        <!-- Main Grid -->
-        <div class="main-grid">
-            <div class="metric-card">
-                <div>
-                    <div class="metric-label">현재 엔/원 환율 (100엔 기준)</div>
-                    <div class="value-box">
-                        <span class="target-value" id="target-value">조회 중...</span>
-                        <span class="unit" id="unit">KRW/100JPY</span>
-                    </div>
-                </div>
-                <div class="diff-box" id="diff-value">어제 대비 변화: -</div>
-            </div>
-
-            <div class="info-panel">
-                <div class="info-item">
-                    <span class="info-label">데이터 출처</span>
-                    <span class="info-content" id="source">European Central Bank / Open Rates</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">출처 관측 시각</span>
-                    <span class="info-content" id="data-time">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">화면 조회 시각</span>
-                    <span class="info-content" id="fetch-time">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">기준 시간대</span>
-                    <span class="info-content" id="timezone">Asia/Seoul (KST, UTC+09:00)</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Chart Section -->
-        <div class="chart-section">
-            <div class="chart-header">
-                <span class="chart-title">환율 변화 추이</span>
-                <div class="period-filter-group">
-                    <button class="period-btn active" onclick="setChartPeriod('1w')">최근 1주</button>
-                    <button class="period-btn" onclick="setChartPeriod('1m')">최근 1개월</button>
-                    <button class="period-btn" onclick="setChartPeriod('all')">전체 기간</button>
-                </div>
-            </div>
-            <div class="chart-container" id="chart-container"></div>
-        </div>
-
-        <button id="retry-btn" class="btn-retry" onclick="executeFetch()">다시 시도</button>
-
-        <!-- History Table Section -->
-        <div class="history-section">
-            <div class="history-title">일별 관측 기록 (Asia/Seoul)</div>
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>날짜 (KST)</th>
-                        <th>데이터 출처</th>
-                        <th>원천 관측 시각</th>
-                        <th>환율 (정규화 값)</th>
-                        <th>단위</th>
-                    </tr>
-                </thead>
-                <tbody id="history-tbody"></tbody>
-            </table>
-        </div>
+  <div class="dashboard-container">
+    <!-- Header -->
+    <div class="dashboard-header">
+      <div class="title-area">
+        <span class="title-text">엔/원 환율 실시간 대시보드</span>
+        <span class="version-badge">v1.4</span>
+      </div>
+      <span id="stale-badge" class="stale-badge">오래된 값</span>
     </div>
 
-    <script>
-        const PRIMARY_API = 'https://open.er-api.com/v6/latest/JPY';
-        const FALLBACK_API = 'https://api.exchangerate-api.com/v4/latest/JPY';
+    <!-- Error Banner -->
+    <div id="error-banner" class="error-banner">
+      <div id="error-msg">실패 상태: -</div>
+    </div>
 
-        const ERROR_MESSAGES = {
-            'TIMEOUT': '응답 시간 초과 (Slow Response)',
-            'HTTP_401': '401/403 인증 거절 (Unauthorized)',
-            'AUTH': '401/403 인증 거절 (Unauthorized)',
-            'RATE_LIMIT': '호출 제한 초과 (Rate Limit)',
-            'OFFLINE': '네트워크 연결 끊김 (Offline)',
-            'INVALID_FORMAT': '응답 스키마 변경 (Invalid Format)',
-            'FORMAT_MUTATED': '응답 스키마 변경 (Invalid Format)'
-        };
+    <!-- Main Grid -->
+    <div class="main-grid">
+      <div class="metric-card">
+        <div>
+          <div class="metric-label">현재 엔/원 환율 (100엔 기준)</div>
+          <div class="value-box">
+            <span class="target-value" id="target-value">조회 중...</span>
+            <span class="unit" id="unit">KRW/100JPY</span>
+          </div>
+        </div>
+        <div class="diff-box" id="diff-value">어제 대비 변화: -</div>
+      </div>
 
-        let appState = {
-            status: 'fresh',
-            error_code: 'none',
-            lastValidData: null,
-            dailyRecords: [],
-            selectedPeriod: '1w'
-        };
+      <div class="info-panel">
+        <div class="info-item">
+          <span class="info-label">데이터 출처</span>
+          <span class="info-content" id="source">European Central Bank / Open Rates</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">출처 관측 시각</span>
+          <span class="info-content" id="data-time">-</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">화면 조회 시각</span>
+          <span class="info-content" id="fetch-time">-</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">기준 시간대</span>
+          <span class="info-content" id="timezone">Asia/Seoul (KST, UTC+09:00)</span>
+        </div>
+      </div>
+    </div>
 
-        function initStorage() {
-            const storedRecords = localStorage.getItem('t04_jpy_records_v1_4');
-            if (storedRecords) appState.dailyRecords = JSON.parse(storedRecords);
+    <!-- Chart Section -->
+    <div class="chart-section">
+      <div class="chart-header">
+        <span class="chart-title">환율 변화 추이</span>
+        <div class="period-filter-group">
+          <button class="period-btn active" onclick="setChartPeriod('1w')">최근 1주</button>
+          <button class="period-btn" onclick="setChartPeriod('1m')">최근 1개월</button>
+          <button class="period-btn" onclick="setChartPeriod('all')">전체 기간</button>
+        </div>
+      </div>
+      <div class="chart-container" id="chart-container"></div>
+    </div>
 
-            const storedLast = localStorage.getItem('t04_last_valid_data_v1_4');
-            if (storedLast) appState.lastValidData = JSON.parse(storedLast);
-        }
+    <button id="retry-btn" class="btn-retry" onclick="executeFetch()">다시 시도</button>
 
-        function getKstDateStr(dateObj) {
-            const options = { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' };
-            return new Intl.DateTimeFormat('en-CA', options).format(dateObj);
-        }
+    <!-- History Table Section -->
+    <div class="history-section">
+      <div class="history-title">일별 관측 기록 (Asia/Seoul)</div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>날짜 (KST)</th>
+            <th>데이터 출처</th>
+            <th>원천 관측 시각</th>
+            <th>환율 (정규화 값)</th>
+            <th>단위</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 
-        function formatDate(date) {
-            const pad = (n) => String(n).padStart(2, '0');
-            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-        }
+  <script>
+    const PRIMARY_API = 'https://open.er-api.com/v6/latest/JPY';
+    const FALLBACK_API = 'https://api.exchangerate-api.com/v4/latest/JPY';
 
-        // 타임아웃 지원 네트워크 Fetch 함수
-        async function fetchWithTimeout(resource, options = {}) {
-            const { timeout = 4000 } = options;
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeout);
-            try {
-                const response = await fetch(resource, { ...options, signal: controller.signal });
-                clearTimeout(id);
-                return response;
-            } catch (error) {
-                clearTimeout(id);
-                throw error;
-            }
-        }
+    const ERROR_MESSAGES = {
+      'TIMEOUT': '응답 시간 초과 (Slow Response)',
+      'HTTP_401': '401/403 인증 거절 (Unauthorized)',
+      'AUTH': '401/403 인증 거절 (Unauthorized)',
+      'RATE_LIMIT': '호출 제한 초과 (Rate Limit)',
+      'OFFLINE': '네트워크 연결 끊김 (Offline)',
+      'INVALID_FORMAT': '응답 스키마 변경 (Invalid Format)',
+      'FORMAT_MUTATED': '응답 스키마 변경 (Invalid Format)'
+    };
 
-        function renderUI() {
-            const staleBadge = document.getElementById('stale-badge');
-            const errorBanner = document.getElementById('error-banner');
-            const errorMsg = document.getElementById('error-msg');
-            const retryBtn = document.getElementById('retry-btn');
-            const valEl = document.getElementById('target-value');
+    let appState = {
+      status: 'fresh',
+      error_code: 'none',
+      lastValidData: null,
+      dailyRecords: [],
+      selectedPeriod: '1w'
+    };
 
-            if (appState.status === 'error' || appState.status === 'stale') {
-                errorBanner.classList.add('active');
-                retryBtn.classList.add('active');
-                const desc = ERROR_MESSAGES[appState.error_code] || '네트워크 또는 원천 응답 오류가 발생했습니다.';
-                errorMsg.innerText = `실패 상태: [${appState.error_code}] ${desc}`;
-            } else {
-                errorBanner.classList.remove('active');
-                retryBtn.classList.remove('active');
-            }
+    function initStorage() {
+      const storedRecords = localStorage.getItem('t04_jpy_records_v1_4');
+      if (storedRecords) appState.dailyRecords = JSON.parse(storedRecords);
 
-            if (appState.status === 'stale') staleBadge.classList.add('active');
-            else staleBadge.classList.remove('active');
+      const storedLast = localStorage.getItem('t04_last_valid_data_v1_4');
+      if (storedLast) appState.lastValidData = JSON.parse(storedLast);
+    }
 
-            if (appState.lastValidData) {
-                valEl.innerText = Number(appState.lastValidData.value).toLocaleString('ko-KR', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
-                document.getElementById('data-time').innerText = appState.lastValidData.dataTime;
-                document.getElementById('fetch-time').innerText = appState.lastValidData.fetchTime;
-            }
+    function getKstDateStr(dateObj) {
+      const options = { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' };
+      return new Intl.DateTimeFormat('en-CA', options).format(dateObj);
+    }
 
-            renderDiff();
-            renderChart();
-            renderHistoryTable();
-        }
+    function formatDate(date) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
 
-        function setChartPeriod(period) {
-            appState.selectedPeriod = period;
-            document.querySelectorAll('.period-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${period}'`));
-            });
-            renderChart();
-        }
+    async function fetchWithTimeout(resource, options = {}) {
+      const { timeout = 4000 } = options;
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(resource, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+      } catch (error) {
+        clearTimeout(id);
+        throw error;
+      }
+    }
 
-        function renderChart() {
-            const chartContainer = document.getElementById('chart-container');
-            const recs = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+    function renderUI() {
+      const staleBadge = document.getElementById('stale-badge');
+      const errorBanner = document.getElementById('error-banner');
+      const errorMsg = document.getElementById('error-msg');
+      const retryBtn = document.getElementById('retry-btn');
+      const valEl = document.getElementById('target-value');
 
-            if (recs.length === 0) {
-                chartContainer.innerHTML = `<div class="chart-empty">표시할 환율 추이 데이터가 없습니다.</div>`;
-                return;
-            }
+      if (appState.status === 'error' || appState.status === 'stale') {
+        errorBanner.classList.add('active');
+        retryBtn.classList.add('active');
+        const desc = ERROR_MESSAGES[appState.error_code] || '네트워크 또는 원천 응답 오류가 발생했습니다.';
+        errorMsg.innerText = `실패 상태: [${appState.error_code}] ${desc}`;
+      } else {
+        errorBanner.classList.remove('active');
+        retryBtn.classList.remove('active');
+      }
 
-            const today = new Date();
-            let filteredRecs = recs;
+      if (appState.status === 'stale') staleBadge.classList.add('active');
+      else staleBadge.classList.remove('active');
 
-            if (appState.selectedPeriod === '1w') {
-                const cutoff = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
-                filteredRecs = recs.filter(r => new Date(r.date) >= cutoff);
-            } else if (appState.selectedPeriod === '1m') {
-                const cutoff = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-                filteredRecs = recs.filter(r => new Date(r.date) >= cutoff);
-            } else if (appState.selectedPeriod === 'all') {
-                const MAX_POINTS = 90;
-                if (recs.length > MAX_POINTS) {
-                    filteredRecs = recs.slice(recs.length - MAX_POINTS);
-                }
-            }
-
-            if (filteredRecs.length === 0) filteredRecs = recs;
-
-            const values = filteredRecs.map(r => r.value);
-            let minVal = Math.min(...values);
-            let maxVal = Math.max(...values);
-            if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
-
-            const svgWidth = 800;
-            const svgHeight = 180;
-            const padding = { top: 20, right: 30, bottom: 30, left: 30 };
-            const chartW = svgWidth - padding.left - padding.right;
-            const chartH = svgHeight - padding.top - padding.bottom;
-
-            const points = filteredRecs.map((rec, idx) => {
-                const x = filteredRecs.length === 1 ? chartW / 2 + padding.left : padding.left + (idx / (filteredRecs.length - 1)) * chartW;
-                const y = padding.top + chartH - ((rec.value - minVal) / (maxVal - minVal)) * chartH;
-                return { x, y, value: rec.value, date: rec.date };
-            });
-
-            const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
-
-            // X축 날짜 라벨을 깔끔하게 간격을 두고 배치 (최대 7~8개만 표시)
-            const labelStep = Math.ceil(points.length / 7);
-
-            let svgHtml = `
-    <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}" style="position: relative;">
-      <!-- 배경 가이드라인 -->
-      <line x1="${padding.left}" y1="${padding.top}" x2="${svgWidth - padding.right}" y2="${padding.top}" stroke="#e2e8f0" stroke-dasharray="4" />
-      <line x1="${padding.left}" y1="${padding.top + chartH / 2}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH / 2}" stroke="#e2e8f0" stroke-dasharray="4" />
-      <line x1="${padding.left}" y1="${padding.top + chartH}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH}" stroke="#e2e8f0" stroke-dasharray="4" />
-
-      <!-- 점 없는 깔끔한 선 그래프 -->
-      <polyline fill="none" stroke="#2563eb" stroke-width="3" points="${polylinePoints}" stroke-linecap="round" stroke-linejoin="round" />
-  `;
-
-            // 하단 X축 날짜 라벨 (점 없이 날짜만 깔끔하게 표시)
-            points.forEach((p, idx) => {
-                const isEdge = idx === 0 || idx === points.length - 1;
-                if (idx % labelStep === 0 || isEdge) {
-                    svgHtml += `
-        <text x="${p.x}" y="${svgHeight - 5}" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">${p.date.substring(5)}</text>
-      `;
-                }
-            });
-
-            // 마우스 호버 감지용 투명 오버레이 트랙 (마우스 올리면 툴팁과 가이드선 표시)
-            points.forEach((p) => {
-                svgHtml += `
-      <g class="hover-point" style="cursor: pointer;">
-        <title>날짜: ${p.date}\n환율: ${p.value.toFixed(2)} KRW/100JPY</title>
-        <!-- 마우스 감지 영역 (투명 수직 바) -->
-        <rect x="${p.x - 10}" y="${padding.top}" width="20" height="${chartH}" fill="transparent" />
-      </g>
-    `;
-            });
-
-            svgHtml += `</svg>`;
-            chartContainer.innerHTML = svgHtml;
-        }
-
-        if (filteredRecs.length === 0) filteredRecs = recs;
-
-        const values = filteredRecs.map(r => r.value);
-        let minVal = Math.min(...values);
-        let maxVal = Math.max(...values);
-        if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
-
-        const svgWidth = 800;
-        const svgHeight = 180;
-        const padding = { top: 20, right: 30, bottom: 30, left: 30 };
-        const chartW = svgWidth - padding.left - padding.right;
-        const chartH = svgHeight - padding.top - padding.bottom;
-
-        const points = filteredRecs.map((rec, idx) => {
-            const x = filteredRecs.length === 1 ? chartW / 2 + padding.left : padding.left + (idx / (filteredRecs.length - 1)) * chartW;
-            const y = padding.top + chartH - ((rec.value - minVal) / (maxVal - minVal)) * chartH;
-            return { x, y, value: rec.value, date: rec.date };
+      if (appState.lastValidData) {
+        valEl.innerText = Number(appState.lastValidData.value).toLocaleString('ko-KR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
         });
+        document.getElementById('data-time').innerText = appState.lastValidData.dataTime;
+        document.getElementById('fetch-time').innerText = appState.lastValidData.fetchTime;
+      }
 
-        const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+      renderDiff();
+      renderChart();
+      renderHistoryTable();
+    }
 
-        let svgHtml = `
+    function setChartPeriod(period) {
+      appState.selectedPeriod = period;
+      document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${period}'`));
+      });
+      renderChart();
+    }
+
+    function renderChart() {
+      const chartContainer = document.getElementById('chart-container');
+      const recs = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      if (recs.length === 0) {
+        chartContainer.innerHTML = `<div class="chart-empty">표시할 환율 추이 데이터가 없습니다.</div>`;
+        return;
+      }
+
+      const today = new Date();
+      let filteredRecs = recs;
+
+      if (appState.selectedPeriod === '1w') {
+        const cutoff = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
+        filteredRecs = recs.filter(r => new Date(r.date) >= cutoff);
+      } else if (appState.selectedPeriod === '1m') {
+        const cutoff = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+        filteredRecs = recs.filter(r => new Date(r.date) >= cutoff);
+      } else if (appState.selectedPeriod === 'all') {
+        const MAX_POINTS = 90;
+        if (recs.length > MAX_POINTS) {
+          filteredRecs = recs.slice(recs.length - MAX_POINTS);
+        }
+      }
+
+      if (filteredRecs.length === 0) filteredRecs = recs;
+
+      const values = filteredRecs.map(r => r.value);
+      let minVal = Math.min(...values);
+      let maxVal = Math.max(...values);
+      if (minVal === maxVal) { minVal -= 1; maxVal += 1; }
+
+      const svgWidth = 800;
+      const svgHeight = 180;
+      const padding = { top: 20, right: 30, bottom: 30, left: 30 };
+      const chartW = svgWidth - padding.left - padding.right;
+      const chartH = svgHeight - padding.top - padding.bottom;
+
+      const points = filteredRecs.map((rec, idx) => {
+        const x = filteredRecs.length === 1 ? chartW / 2 + padding.left : padding.left + (idx / (filteredRecs.length - 1)) * chartW;
+        const y = padding.top + chartH - ((rec.value - minVal) / (maxVal - minVal)) * chartH;
+        return { x, y, value: rec.value, date: rec.date };
+      });
+
+      const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+      const labelStep = Math.ceil(points.length / 7);
+
+      let svgHtml = `
         <svg class="chart-svg" viewBox="0 0 ${svgWidth} ${svgHeight}">
           <line x1="${padding.left}" y1="${padding.top}" x2="${svgWidth - padding.right}" y2="${padding.top}" stroke="#e2e8f0" stroke-dasharray="4" />
-          <line x1="${padding.left}" y1="${padding.top + chartH / 2}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH / 2}" stroke="#e2e8f0" stroke-dasharray="4" />
+          <line x1="${padding.left}" y1="${padding.top + chartH/2}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH/2}" stroke="#e2e8f0" stroke-dasharray="4" />
           <line x1="${padding.left}" y1="${padding.top + chartH}" x2="${svgWidth - padding.right}" y2="${padding.top + chartH}" stroke="#e2e8f0" stroke-dasharray="4" />
           <polyline fill="none" stroke="#2563eb" stroke-width="3" points="${polylinePoints}" stroke-linecap="round" stroke-linejoin="round" />
       `;
 
-        points.forEach((p, idx) => {
-            const isEdge = idx === 0 || idx === points.length - 1;
-            const showLabel = filteredRecs.length <= 10 || isEdge;
-            svgHtml += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#ffffff" stroke="#2563eb" stroke-width="2.5" />`;
-            if (showLabel) {
-                svgHtml += `
-            <text x="${p.x}" y="${p.y - 10}" font-size="11" font-weight="700" fill="#1e293b" text-anchor="middle">${p.value.toFixed(2)}</text>
+      points.forEach((p, idx) => {
+        const isEdge = idx === 0 || idx === points.length - 1;
+        if (idx % labelStep === 0 || isEdge) {
+          svgHtml += `
             <text x="${p.x}" y="${svgHeight - 5}" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">${p.date.substring(5)}</text>
           `;
-            }
-        });
+        }
+      });
 
-        svgHtml += `</svg>`;
-        chartContainer.innerHTML = svgHtml;
+      points.forEach((p) => {
+        svgHtml += `
+          <g style="cursor: pointer;">
+            <title>날짜: ${p.date}\n환율: ${p.value.toFixed(2)} KRW/100JPY</title>
+            <rect x="${p.x - 10}" y="${padding.top}" width="20" height="${chartH}" fill="transparent" />
+          </g>
+        `;
+      });
+
+      svgHtml += `</svg>`;
+      chartContainer.innerHTML = svgHtml;
     }
 
-        function renderDiff() {
-            const diffEl = document.getElementById('diff-value');
-            const recs = appState.dailyRecords;
-            if (recs.length < 2) {
-                diffEl.innerText = '어제 대비 변화: 데이터 수집 중';
-                return;
-            }
+    function renderDiff() {
+      const diffEl = document.getElementById('diff-value');
+      const recs = appState.dailyRecords;
+      if (recs.length < 2) {
+        diffEl.innerText = '어제 대비 변화: 데이터 수집 중';
+        return;
+      }
 
-            const sorted = [...recs].sort((a, b) => new Date(a.date) - new Date(b.date));
-            const latest = sorted[sorted.length - 1];
-            const prev = sorted[sorted.length - 2];
+      const sorted = [...recs].sort((a, b) => new Date(a.date) - new Date(b.date));
+      const latest = sorted[sorted.length - 1];
+      const prev = sorted[sorted.length - 2];
 
-            const diff = latest.value - prev.value;
-            const diffFormatted = (diff >= 0 ? '+' : '') + diff.toFixed(2);
+      const diff = latest.value - prev.value;
+      const diffFormatted = (diff >= 0 ? '+' : '') + diff.toFixed(2);
 
-            diffEl.innerText = `어제 대비 변화: ${diffFormatted} KRW (${prev.date} 대비)`;
-            diffEl.className = 'diff-box ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : '');
-        }
+      diffEl.innerText = `어제 대비 변화: ${diffFormatted} KRW (${prev.date} 대비)`;
+      diffEl.className = 'diff-box ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : '');
+    }
 
-        function renderHistoryTable() {
-            const tbody = document.getElementById('history-tbody');
-            tbody.innerHTML = '';
-            const sorted = [...appState.dailyRecords].sort((a, b) => new Date(b.date) - new Date(a.date));
+    function renderHistoryTable() {
+      const tbody = document.getElementById('history-tbody');
+      tbody.innerHTML = '';
+      const sorted = [...appState.dailyRecords].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-            sorted.forEach(rec => {
-                const tr = document.createElement('tr');
-                const sourceDomain = rec.url ? new URL(rec.url).hostname : 'open.er-api.com';
-                tr.innerHTML = `
+      sorted.forEach(rec => {
+        const tr = document.createElement('tr');
+        const sourceDomain = rec.url ? new URL(rec.url).hostname : 'open.er-api.com';
+        tr.innerHTML = `
           <td><strong>${rec.date}</strong></td>
           <td>${sourceDomain}</td>
           <td>${rec.dataTime}</td>
           <td><strong>${Number(rec.value).toFixed(2)}</strong></td>
           <td>${rec.unit}</td>
         `;
-                tbody.appendChild(tr);
-            });
-        }
+        tbody.appendChild(tr);
+      });
+    }
 
-        async function syncRealHistoricalRates() {
-            try {
-                const today = new Date();
-                const pastDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-                const startDateStr = getKstDateStr(pastDate);
-
-                const histRes = await fetchWithTimeout(`https://api.frankfurter.app/${startDateStr}..?from=JPY&to=KRW`, { timeout: 3000 });
-                if (histRes.ok) {
-                    const histData = await histRes.json();
-                    const rates = histData.rates;
-                    Object.keys(rates).forEach(dateStr => {
-                        if (rates[dateStr] && rates[dateStr].KRW) {
-                            const real100JpyRate = Number((rates[dateStr].KRW * 100).toFixed(2));
-                            addOrUpdateDailyRecord(dateStr, 'https://api.frankfurter.app', `${dateStr} 16:00:00`, real100JpyRate, 'KRW/100JPY');
-                        }
-                    });
-                }
-            } catch (e) {
-                console.warn('Historical sync skipped or timed out');
+    async function syncRealHistoricalRates() {
+      try {
+        const today = new Date();
+        const pastDate = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+        const startDateStr = getKstDateStr(pastDate);
+        
+        const histRes = await fetchWithTimeout(`https://api.frankfurter.app/${startDateStr}..?from=JPY&to=KRW`, { timeout: 3000 });
+        if (histRes.ok) {
+          const histData = await histRes.json();
+          const rates = histData.rates;
+          Object.keys(rates).forEach(dateStr => {
+            if (rates[dateStr] && rates[dateStr].KRW) {
+              const real100JpyRate = Number((rates[dateStr].KRW * 100).toFixed(2));
+              addOrUpdateDailyRecord(dateStr, 'https://api.frankfurter.app', `${dateStr} 16:00:00`, real100JpyRate, 'KRW/100JPY');
             }
+          });
         }
+      } catch (e) {
+        console.warn('Historical sync skipped or timed out');
+      }
+    }
 
-        async function fetchJpyExchangeRate() {
-            try {
-                const res = await fetchWithTimeout(PRIMARY_API, { timeout: 4000 });
-                if (res.ok) {
-                    const data = await res.json();
-                    const rawKrwRate = data.rates.KRW;
-                    const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
-                    const unixTime = data.time_last_update_unix || Math.floor(Date.now() / 1000);
-                    return { value: jpy100Rate, time: new Date(unixTime * 1000), url: PRIMARY_API };
-                }
-            } catch (e) {
-                console.warn('Primary API failed/timed out, switching to Fallback...');
-            }
-
-            try {
-                const res = await fetchWithTimeout(FALLBACK_API, { timeout: 4000 });
-                if (res.ok) {
-                    const data = await res.json();
-                    const rawKrwRate = data.rates.KRW;
-                    const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
-                    return { value: jpy100Rate, time: new Date(), url: FALLBACK_API };
-                }
-            } catch (e) {
-                console.error('Fallback API failed');
-            }
-
-            throw new Error('OFFLINE');
+    async function fetchJpyExchangeRate() {
+      try {
+        const res = await fetchWithTimeout(PRIMARY_API, { timeout: 4000 });
+        if (res.ok) {
+          const data = await res.json();
+          const rawKrwRate = data.rates.KRW;
+          const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
+          const unixTime = data.time_last_update_unix || Math.floor(Date.now() / 1000);
+          return { value: jpy100Rate, time: new Date(unixTime * 1000), url: PRIMARY_API };
         }
+      } catch (e) {
+        console.warn('Primary API failed/timed out, switching to Fallback...');
+      }
 
-        async function executeFetch(mockParam = null) {
-            const retryBtn = document.getElementById('retry-btn');
-            const targetVal = document.getElementById('target-value');
-            const urlParams = new URLSearchParams(window.location.search);
-            const mockMode = mockParam || urlParams.get('mock');
-
-            if (retryBtn) {
-                retryBtn.disabled = true;
-                retryBtn.innerText = "조회 중...";
-            }
-
-            if (mockMode) {
-                handleMockFailure(mockMode);
-                resetRetryBtn();
-                return;
-            }
-
-            try {
-                await syncRealHistoricalRates();
-
-                const data = await fetchJpyExchangeRate();
-                const now = new Date();
-                const kstDate = getKstDateStr(now);
-                const fetchTimeStr = formatDate(now);
-                const dataTimeStr = formatDate(data.time);
-
-                appState.lastValidData = { value: data.value, dataTime: dataTimeStr, fetchTime: fetchTimeStr };
-                localStorage.setItem('t04_last_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
-
-                addOrUpdateDailyRecord(kstDate, data.url, dataTimeStr, data.value, 'KRW/100JPY');
-
-                appState.status = 'fresh';
-                appState.error_code = 'none';
-
-            } catch (err) {
-                let errCode = 'OFFLINE';
-                if (err.message === 'INVALID_FORMAT' || err.message === 'FORMAT_MUTATED') errCode = 'INVALID_FORMAT';
-                setFailureState(errCode);
-
-                if (targetVal && !appState.lastValidData) {
-                    targetVal.innerText = "조회 실패";
-                }
-            } finally {
-                resetRetryBtn();
-                renderUI();
-            }
+      try {
+        const res = await fetchWithTimeout(FALLBACK_API, { timeout: 4000 });
+        if (res.ok) {
+          const data = await res.json();
+          const rawKrwRate = data.rates.KRW;
+          const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
+          return { value: jpy100Rate, time: new Date(), url: FALLBACK_API };
         }
+      } catch (e) {
+        console.error('Fallback API failed');
+      }
 
-        function resetRetryBtn() {
-            const retryBtn = document.getElementById('retry-btn');
-            if (retryBtn) {
-                retryBtn.disabled = false;
-                retryBtn.innerText = "다시 시도";
-            }
+      throw new Error('OFFLINE');
+    }
+
+    async function executeFetch(mockParam = null) {
+      const retryBtn = document.getElementById('retry-btn');
+      const targetVal = document.getElementById('target-value');
+      const urlParams = new URLSearchParams(window.location.search);
+      const mockMode = mockParam || urlParams.get('mock');
+
+      if (retryBtn) {
+        retryBtn.disabled = true;
+        retryBtn.innerText = "조회 중...";
+      }
+
+      if (mockMode) {
+        handleMockFailure(mockMode);
+        resetRetryBtn();
+        return;
+      }
+
+      try {
+        await syncRealHistoricalRates();
+
+        const data = await fetchJpyExchangeRate();
+        const now = new Date();
+        const kstDate = getKstDateStr(now);
+        const fetchTimeStr = formatDate(now);
+        const dataTimeStr = formatDate(data.time);
+
+        appState.lastValidData = { value: data.value, dataTime: dataTimeStr, fetchTime: fetchTimeStr };
+        localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
+
+        addOrUpdateDailyRecord(kstDate, data.url, dataTimeStr, data.value, 'KRW/100JPY');
+
+        appState.status = 'fresh';
+        appState.error_code = 'none';
+
+      } catch (err) {
+        let errCode = 'OFFLINE';
+        if (err.message === 'INVALID_FORMAT' || err.message === 'FORMAT_MUTATED') errCode = 'INVALID_FORMAT';
+        setFailureState(errCode);
+
+        if (targetVal && !appState.lastValidData) {
+          targetVal.innerText = "조회 실패";
         }
+      } finally {
+        resetRetryBtn();
+        renderUI();
+      }
+    }
 
-        function handleMockFailure(mode) {
-            const upperMode = String(mode).toUpperCase();
-            if (upperMode === 'TIMEOUT') setFailureState('TIMEOUT');
-            else if (upperMode === 'AUTH' || upperMode === 'HTTP_401') setFailureState('HTTP_401');
-            else if (upperMode === 'RATE_LIMIT') setFailureState('RATE_LIMIT');
-            else if (upperMode === 'OFFLINE') setFailureState('OFFLINE');
-            else if (upperMode === 'INVALID_FORMAT' || upperMode === 'FORMAT_MUTATED') setFailureState('INVALID_FORMAT');
-            else if (upperMode === 'T04-RECOVER-D2') recoverD2Asset();
+    function resetRetryBtn() {
+      const retryBtn = document.getElementById('retry-btn');
+      if (retryBtn) {
+        retryBtn.disabled = false;
+        retryBtn.innerText = "다시 시도";
+      }
+    }
 
-            renderUI();
-        }
+    function handleMockFailure(mode) {
+      const upperMode = String(mode).toUpperCase();
+      if (upperMode === 'TIMEOUT') setFailureState('TIMEOUT');
+      else if (upperMode === 'AUTH' || upperMode === 'HTTP_401') setFailureState('HTTP_401');
+      else if (upperMode === 'RATE_LIMIT') setFailureState('RATE_LIMIT');
+      else if (upperMode === 'OFFLINE') setFailureState('OFFLINE');
+      else if (upperMode === 'INVALID_FORMAT' || upperMode === 'FORMAT_MUTATED') setFailureState('INVALID_FORMAT');
+      else if (upperMode === 'T04-RECOVER-D2') recoverD2Asset();
+      
+      renderUI();
+    }
 
-        function setFailureState(code) {
-            appState.error_code = code;
-            appState.status = appState.lastValidData ? 'stale' : 'error';
-        }
+    function setFailureState(code) {
+      appState.error_code = code;
+      appState.status = appState.lastValidData ? 'stale' : 'error';
+    }
 
-        function recoverD2Asset() {
-            appState.status = 'fresh';
-            appState.error_code = 'none';
-            const nextDate = getKstDateStr(new Date(Date.now() + 86400000));
-            const recoveredVal = appState.lastValidData ? Number((appState.lastValidData.value + 1.20).toFixed(2)) : 916.50;
+    function recoverD2Asset() {
+      appState.status = 'fresh';
+      appState.error_code = 'none';
+      const nextDate = getKstDateStr(new Date(Date.now() + 86400000));
+      const recoveredVal = appState.lastValidData ? Number((appState.lastValidData.value + 1.20).toFixed(2)) : 916.50;
+      
+      appState.lastValidData = {
+        value: recoveredVal,
+        dataTime: formatDate(new Date()),
+        fetchTime: formatDate(new Date())
+      };
+      localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
+      addOrUpdateDailyRecord(nextDate, PRIMARY_API, formatDate(new Date()), recoveredVal, 'KRW/100JPY');
+    }
 
-            appState.lastValidData = {
-                value: recoveredVal,
-                dataTime: formatDate(new Date()),
-                fetchTime: formatDate(new Date())
-            };
-            localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
-            addOrUpdateDailyRecord(nextDate, PRIMARY_API, formatDate(new Date()), recoveredVal, 'KRW/100JPY');
-        }
+    function addOrUpdateDailyRecord(dateStr, url, dataTime, val, unit) {
+      const idx = appState.dailyRecords.findIndex(r => r.date === dateStr);
+      const recordObj = { date: dateStr, url: url, dataTime: dataTime, value: val, unit: unit };
 
-        function addOrUpdateDailyRecord(dateStr, url, dataTime, val, unit) {
-            const idx = appState.dailyRecords.findIndex(r => r.date === dateStr);
-            const recordObj = { date: dateStr, url: url, dataTime: dataTime, value: val, unit: unit };
+      if (idx >= 0) appState.dailyRecords[idx] = recordObj;
+      else appState.dailyRecords.push(recordObj);
+      
+      localStorage.setItem('t04_jpy_records_v1_4', JSON.stringify(appState.dailyRecords));
+    }
 
-            if (idx >= 0) appState.dailyRecords[idx] = recordObj;
-            else appState.dailyRecords.push(recordObj);
+    window.addEventListener('t04-fixture-trigger', (e) => {
+      const detail = e.detail || {};
+      if (detail.error_code) handleMockFailure(detail.error_code);
+      else if (detail.action === 'T04-RECOVER-D2') {
+        recoverD2Asset();
+        renderUI();
+      }
+    });
 
-            localStorage.setItem('t04_jpy_records_v1_4', JSON.stringify(appState.dailyRecords));
-        }
-
-        window.addEventListener('t04-fixture-trigger', (e) => {
-            const detail = e.detail || {};
-            if (detail.error_code) handleMockFailure(detail.error_code);
-            else if (detail.action === 'T04-RECOVER-D2') {
-                recoverD2Asset();
-                renderUI();
-            }
-        });
-
-        initStorage();
-        executeFetch();
-    </script>
+    initStorage();
+    executeFetch();
+  </script>
 </body>
-
 </html>
