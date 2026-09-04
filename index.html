@@ -215,63 +215,6 @@
     .history-table tr:hover td {
       background-color: #f8fafc;
     }
-
-    /* Trend Chart Section */
-    .chart-section {
-      border-top: 2px solid #f1f5f9;
-      padding-top: 24px;
-      margin-bottom: 32px;
-    }
-    .chart-title {
-      font-size: 15px;
-      font-weight: 800;
-      color: #0f172a;
-      margin-bottom: 16px;
-    }
-    .chart-wrap {
-      width: 100%;
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 16px;
-    }
-    #trend-chart {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-    #trend-chart circle {
-      cursor: pointer;
-      transition: r 0.15s ease;
-    }
-    #trend-chart circle:hover {
-      r: 6;
-    }
-    .chart-range {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-    .range-btn {
-      padding: 6px 14px;
-      border-radius: 20px;
-      border: 1px solid #e2e8f0;
-      background: #f8fafc;
-      color: #475569;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .range-btn:hover {
-      background: #eff6ff;
-      border-color: #bfdbfe;
-    }
-    .range-btn.active {
-      background: #2563eb;
-      color: #ffffff;
-      border-color: #2563eb;
-    }
   </style>
 </head>
 <body>
@@ -328,20 +271,6 @@
 
     <button id="retry-btn" class="btn-retry" onclick="executeFetch()">다시 시도</button>
 
-    <!-- Trend Chart Section -->
-    <div class="chart-section">
-      <div class="chart-title">환율 추세 (일별, 100엔 기준)</div>
-      <div class="chart-range" id="chart-range-group">
-        <button type="button" class="range-btn" data-range="7D" onclick="setChartRange('7D', this)">1주</button>
-        <button type="button" class="range-btn" data-range="1M" onclick="setChartRange('1M', this)">1개월</button>
-        <button type="button" class="range-btn" data-range="3M" onclick="setChartRange('3M', this)">3개월</button>
-        <button type="button" class="range-btn active" data-range="ALL" onclick="setChartRange('ALL', this)">전체</button>
-      </div>
-      <div class="chart-wrap">
-        <svg id="trend-chart" viewBox="0 0 900 260" preserveAspectRatio="xMidYMid meet" role="img" aria-label="일별 환율 추세 차트"></svg>
-      </div>
-    </div>
-
     <!-- Full Width History Section -->
     <div class="history-section">
       <div class="history-title">일별 관측 기록 (Asia/Seoul)</div>
@@ -383,8 +312,6 @@
       lastValidData: null,
       dailyRecords: []
     };
-
-    let chartRange = 'ALL'; // '7D' | '1M' | '3M' | 'ALL'
 
     function initStorage() {
       const storedRecords = localStorage.getItem('t04_jpy_records_v1_4');
@@ -442,111 +369,6 @@
 
       renderDiff();
       renderHistoryTable();
-      renderChart();
-    }
-
-    function setChartRange(range, btnEl) {
-      chartRange = range;
-      document.querySelectorAll('#chart-range-group .range-btn').forEach(b => b.classList.remove('active'));
-      if (btnEl) btnEl.classList.add('active');
-      renderChart();
-    }
-
-    function getFilteredChartRecords() {
-      const all = [...appState.dailyRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
-      if (chartRange === 'ALL' || all.length === 0) return all;
-
-      const daysMap = { '7D': 7, '1M': 30, '3M': 90 };
-      const days = daysMap[chartRange];
-      // Anchor to the most recent record's date rather than real "today",
-      // so the filter stays consistent with mocked/recovered test data.
-      const latestDate = new Date(all[all.length - 1].date);
-      const cutoff = new Date(latestDate.getTime() - (days - 1) * 86400000);
-
-      return all.filter(r => new Date(r.date) >= cutoff);
-    }
-
-    function renderChart() {
-      const svg = document.getElementById('trend-chart');
-      if (!svg) return;
-
-      const recs = getFilteredChartRecords();
-
-      const width = 900, height = 260;
-      const padL = 60, padR = 20, padT = 20, padB = 36;
-      const plotW = width - padL - padR;
-      const plotH = height - padT - padB;
-
-      if (recs.length < 2) {
-        const msg = appState.dailyRecords.length >= 2
-          ? '선택한 기간에는 표시할 데이터가 없습니다'
-          : '추세를 표시하려면 2일 이상의 데이터가 필요합니다';
-        svg.innerHTML = `
-          <text x="${width / 2}" y="${height / 2}" text-anchor="middle"
-            fill="#94a3b8" font-size="14" font-weight="600">
-            ${msg}
-          </text>`;
-        return;
-      }
-
-      const values = recs.map(r => Number(r.value));
-      let minV = Math.min(...values);
-      let maxV = Math.max(...values);
-      if (minV === maxV) { minV -= 1; maxV += 1; }
-      const pad = (maxV - minV) * 0.15;
-      minV -= pad;
-      maxV += pad;
-
-      const xStep = plotW / (recs.length - 1);
-      const xScale = i => padL + i * xStep;
-      const yScale = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
-
-      // Horizontal gridlines + y-axis labels
-      let gridSvg = '';
-      const gridCount = 4;
-      for (let g = 0; g <= gridCount; g++) {
-        const gv = minV + (maxV - minV) * (g / gridCount);
-        const gy = yScale(gv);
-        gridSvg += `<line x1="${padL}" y1="${gy}" x2="${width - padR}" y2="${gy}" stroke="#f1f5f9" stroke-width="1" />`;
-        gridSvg += `<text x="${padL - 10}" y="${gy + 4}" text-anchor="end" font-size="11" fill="#94a3b8">${gv.toFixed(1)}</text>`;
-      }
-
-      // Line + area
-      const pts = recs.map((r, i) => `${xScale(i)},${yScale(Number(r.value))}`);
-      const areaPath = `M${xScale(0)},${padT + plotH} L${pts.join(' L')} L${xScale(recs.length - 1)},${padT + plotH} Z`;
-
-      // Rising/falling color based on first vs last value (matches diff-box convention: up=red, down=blue)
-      const trendUp = values[values.length - 1] >= values[0];
-      const lineColor = trendUp ? '#dc2626' : '#2563eb';
-      const areaColor = trendUp ? '#fef2f2' : '#eff6ff';
-
-      // Points with native tooltips
-      let pointsSvg = '';
-      recs.forEach((r, i) => {
-        const cx = xScale(i);
-        const cy = yScale(Number(r.value));
-        pointsSvg += `<circle cx="${cx}" cy="${cy}" r="4" fill="${lineColor}" stroke="#ffffff" stroke-width="2">` +
-          `<title>${r.date}: ${Number(r.value).toFixed(2)} ${r.unit}</title></circle>`;
-      });
-
-      // X-axis date labels (thin out if many points)
-      let labelSvg = '';
-      const labelStep = Math.max(1, Math.ceil(recs.length / 8));
-      recs.forEach((r, i) => {
-        if (i % labelStep === 0 || i === recs.length - 1) {
-          labelSvg += `<text x="${xScale(i)}" y="${height - padB + 20}" text-anchor="middle" font-size="11" fill="#64748b">${r.date.slice(5)}</text>`;
-        }
-      });
-
-      svg.innerHTML = `
-        ${gridSvg}
-        <path d="${areaPath}" fill="${areaColor}" opacity="0.7" />
-        <polyline points="${pts.join(' ')}" fill="none" stroke="${lineColor}" stroke-width="2.5"
-          stroke-linejoin="round" stroke-linecap="round" />
-        ${pointsSvg}
-        ${labelSvg}
-        <line x1="${padL}" y1="${padT + plotH}" x2="${width - padR}" y2="${padT + plotH}" stroke="#e2e8f0" stroke-width="1.5" />
-      `;
     }
 
     function renderDiff() {
