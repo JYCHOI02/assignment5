@@ -767,6 +767,117 @@
 
     initStorage();
     executeFetch();
-  </script>
+    // 1. 타임아웃(5초)이 적용된 safeFetch 함수 추가
+async function fetchWithTimeout(resource, options = {}) {
+  const { timeout = 5000 } = options;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(resource, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
+// 2. 타임아웃 적용 및 Fallback 예외 처리 보강
+async function fetchJpyExchangeRate() {
+  try {
+    const res = await fetchWithTimeout(PRIMARY_API, { timeout: 5000 });
+    if (res.ok) {
+      const data = await res.json();
+      const rawKrwRate = data.rates.KRW;
+      const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
+      const unixTime = data.time_last_update_unix || Math.floor(Date.now() / 1000);
+      return {
+        value: jpy100Rate,
+        time: new Date(unixTime * 1000),
+        url: PRIMARY_API
+      };
+    }
+  } catch (e) {
+    console.warn('Primary fetch failed/timed out, trying fallback...');
+  }
+
+  try {
+    const res = await fetchWithTimeout(FALLBACK_API, { timeout: 5000 });
+    if (res.ok) {
+      const data = await res.json();
+      const rawKrwRate = data.rates.KRW;
+      const jpy100Rate = Number((rawKrwRate * 100).toFixed(2));
+      return {
+        value: jpy100Rate,
+        time: new Date(),
+        url: FALLBACK_API
+      };
+    }
+  } catch (e) {
+    console.error('Fallback fetch failed/timed out');
+  }
+
+  throw new Error('OFFLINE');
+}
+
+// 3. 무한 로딩 방지를 위한 try-catch-finally 보강
+async function executeFetch(mockParam = null) {
+  const retryBtn = document.getElementById('retry-btn');
+  const targetVal = document.getElementById('target-value');
+  const urlParams = new URLSearchParams(window.location.search);
+  const mockMode = mockParam || urlParams.get('mock');
+
+  if (retryBtn) {
+    retryBtn.disabled = true;
+    retryBtn.innerText = "조회 중...";
+  }
+
+  if (mockMode) {
+    handleMockFailure(mockMode);
+    resetRetryBtn();
+    return;
+  }
+
+  try {
+    // 히스토리 동기화 실패가 메인 조회를 막지 않도록 Catch 처리
+    await syncRealHistoricalRates().catch(e => console.warn('Sync failed:', e));
+
+    const data = await fetchJpyExchangeRate();
+    const now = new Date();
+    const kstDate = getKstDateStr(now);
+    const fetchTimeStr = formatDate(now);
+    const dataTimeStr = formatDate(data.time);
+
+    appState.lastValidData = {
+      value: data.value,
+      dataTime: dataTimeStr,
+      fetchTime: fetchTimeStr
+    };
+    localStorage.setItem('t04_last_valid_data_v1_4', JSON.stringify(appState.lastValidData));
+
+    addOrUpdateDailyRecord(kstDate, data.url, dataTimeStr, data.value, 'KRW/100JPY');
+
+    appState.status = 'fresh';
+    appState.error_code = 'none';
+
+  } catch (err) {
+    let errCode = 'OFFLINE';
+    if (err.message === 'INVALID_FORMAT' || err.message === 'FORMAT_MUTATED') errCode = 'INVALID_FORMAT';
+    setFailureState(errCode);
+    
+    // 조회가 안 될 경우 '조회 중...' 글자 변경
+    if (targetVal && !appState.lastValidData) {
+      targetVal.innerText = "조회 실패";
+    }
+  } finally {
+    // 어떤 에러가 발생해도 무한 로딩을 끊고 버튼 및 UI 원복
+    resetRetryBtn();
+    renderUI();
+  }
+}
+    </script>
 </body>
 </html>
